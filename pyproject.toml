@@ -1,0 +1,13 @@
+[project]
+name = "coinbase-service"
+version = "0.1.0"
+description = "Tiny FastAPI service to fetch Coinbase holdings"
+authors = [{ name = "Jaume Triay", email = "jaume.triay@protonmail.com" }]
+requires-python = ">=3.11"
+
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "requests"
+]
+

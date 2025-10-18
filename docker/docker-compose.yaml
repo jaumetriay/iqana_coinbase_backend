@@ -1,0 +1,11 @@
+services:
+  coinbase-service:
+    build:
+      context: ..
+      dockerfile: docker/dockerfile
+    container_name: coinbase-service
+    ports:
+      - "8000:8000"
+    environment:
+      - COINBASE_API_KEY=${COINBASE_API_KEY}
+    restart: unless-stopped

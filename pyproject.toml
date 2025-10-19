@@ -8,6 +8,37 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi",
     "uvicorn",
-    "requests"
+    "httpx>=0.28.1",
+    "boto3>=1.40.55",
+    "python-dotenv>=1.1.1",
+    "cdp-sdk",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "black", "mypy", "pre-commit"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "app.main"
+disable_error_code = ["misc"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "types-requests>=2.32.4.20250913",
+    "uvicorn>=0.38.0",
+]

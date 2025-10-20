@@ -1,10 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from typing import Any, Dict
 import logging
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.coinbase_client import coinbase_client
 
 logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="Coinbase Holdings API",
@@ -12,9 +16,13 @@ app = FastAPI(
     description="API to retrieve Coinbase account holdings",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 @app.get("/holdings", response_model=Dict[str, Any])
-async def holdings() -> Dict[str, Any]:
+@limiter.limit("10/minute")
+async def holdings(request: Request) -> Dict[str, Any]:
     """Get Coinbase account holdings."""
     try:
         result = await coinbase_client.get_holdings()

@@ -23,3 +23,4 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-yaml
+        exclude: ^deployment/cloudformation/.*\.yaml$

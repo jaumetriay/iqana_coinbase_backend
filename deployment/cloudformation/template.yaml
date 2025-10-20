@@ -119,9 +119,12 @@ Resources:
           ImageConfiguration:
             Port: 8000
             RuntimeEnvironmentVariables:
-              ENVIRONMENT: !Ref Environment
-              REGION: !Ref AWS::Region
-              COINBASE_API_KEY: coinbase_api_key_secret
+              - Name: ENVIRONMENT
+                Value: !Ref Environment
+              - Name: REGION
+                Value: !Ref AWS::Region
+              - Name: COINBASE_API_KEY
+                Value: coinbase_api_key_secret
           ImageRepositoryType: ECR
       InstanceConfiguration:
         Cpu: 0.25 vCPU

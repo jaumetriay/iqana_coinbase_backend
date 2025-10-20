@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Coinbase Holdings API with App Runner, CloudFront, and WAF protection'
+Description: 'App Runner Service and CloudFront for Coinbase Holdings API'
 
 Parameters:
   Environment:
@@ -8,128 +8,41 @@ Parameters:
     AllowedValues: [dev, uat, prod]
     Description: Environment name
 
+  BaseStackName:
+    Type: String
+    Default: coinbase-base-dev
+    Description: Name of the base infrastructure stack
+
+  GitHubRepo:
+    Type: String
+    Default: "https://github.com/your-username/iqana_coinbase_backend"
+    Description: GitHub repository URL (replace with your actual repo)
+
+  GitHubBranch:
+    Type: String
+    Default: "main"
+    Description: GitHub branch to deploy
+
 Resources:
-  # IAM Role for App Runner to access Secrets Manager
-  AppRunnerInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "coinbase-apprunner-role-${Environment}"
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: tasks.apprunner.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: SecretsManagerAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:coinbase_api_key_secret*"
-
-  # ECR Repository for Docker images
-  ECRRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: coinbase-service
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "selection": {
-                  "tagStatus": "untagged",
-                  "countType": "sinceImagePushed",
-                  "countUnit": "days",
-                  "countNumber": 1
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }
-
-  # WAF Web ACL for protection
-  WebACL:
-    Type: AWS::WAFv2::WebACL
-    Properties:
-      Name: !Sub "coinbase-waf-${Environment}"
-      Scope: CLOUDFRONT
-      DefaultAction:
-        Allow: {}
-      Rules:
-        # Rate limiting rule - 100 requests per 5 minutes per IP
-        - Name: RateLimitRule
-          Priority: 1
-          Statement:
-            RateBasedStatement:
-              Limit: 100
-              AggregateKeyType: IP
-          Action:
-            Block: {}
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: !Sub "RateLimit-${Environment}"
-
-        # AWS Managed Rules - Core Rule Set for common attacks
-        - Name: AWSManagedRulesCommonRuleSet
-          Priority: 2
-          OverrideAction:
-            None: {}
-          Statement:
-            ManagedRuleGroupStatement:
-              VendorName: AWS
-              Name: AWSManagedRulesCommonRuleSet
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: !Sub "CommonRuleSet-${Environment}"
-
-        # Block known bad IPs
-        - Name: AWSManagedRulesAmazonIpReputationList
-          Priority: 3
-          OverrideAction:
-            None: {}
-          Statement:
-            ManagedRuleGroupStatement:
-              VendorName: AWS
-              Name: AWSManagedRulesAmazonIpReputationList
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: !Sub "IpReputation-${Environment}"
-
-  # App Runner Service
+  # App Runner Service with GitHub source
   AppRunnerService:
     Type: AWS::AppRunner::Service
     Properties:
       ServiceName: !Sub "coinbase-service-${Environment}"
       SourceConfiguration:
-        ImageRepository:
-          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/coinbase-service:${Environment}"
-          ImageConfiguration:
-            Port: 8000
-            RuntimeEnvironmentVariables:
-              - Name: ENVIRONMENT
-                Value: !Ref Environment
-              - Name: REGION
-                Value: !Ref AWS::Region
-              - Name: COINBASE_API_KEY
-                Value: coinbase_api_key_secret
-          ImageRepositoryType: ECR
+        CodeRepository:
+          RepositoryUrl: !Ref GitHubRepo
+          SourceCodeVersion:
+            Type: BRANCH
+            Value: !Ref GitHubBranch
+          CodeConfiguration:
+            ConfigurationSource: CONFIGURATION_FILE
+        AutoDeploymentsEnabled: false
       InstanceConfiguration:
         Cpu: 0.25 vCPU
         Memory: 0.5 GB
-        InstanceRoleArn: !Ref AppRunnerInstanceRole
+        InstanceRoleArn: !ImportValue
+          Fn::Sub: "${BaseStackName}-InstanceRole"
       HealthCheckConfiguration:
         Protocol: HTTP
         Path: /health
@@ -137,13 +50,6 @@ Resources:
         Timeout: 5
         HealthyThreshold: 1
         UnhealthyThreshold: 5
-      Tags:
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Service
-          Value: coinbase-holdings-api
-
-
 
   # CloudFront Distribution
   CloudFrontDistribution:
@@ -162,21 +68,14 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
           CachedMethods: [GET, HEAD]
-          # Disable caching for API responses
-          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
-          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
           Compress: true
-        WebACLId: !Ref WebACL
+        WebACLId: !ImportValue
+          Fn::Sub: "${BaseStackName}-WebACLId"
         Enabled: true
         Comment: !Sub "CloudFront distribution for coinbase-service-${Environment}"
-        PriceClass: PriceClass_100  # Use only North America and Europe edge locations
-
-  # CloudWatch Log Group for App Runner logs
-  LogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/apprunner/coinbase-service-${Environment}"
-      RetentionInDays: 7
+        PriceClass: PriceClass_100
 
 Outputs:
   AppRunnerServiceUrl:
@@ -190,15 +89,3 @@ Outputs:
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
     Export:
       Name: !Sub "${AWS::StackName}-CloudFrontUrl"
-
-  ECRRepositoryURI:
-    Description: ECR Repository URI for Docker images
-    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/coinbase-service"
-    Export:
-      Name: !Sub "${AWS::StackName}-ECRRepo"
-
-  WebACLId:
-    Description: WAF Web ACL ID
-    Value: !Ref WebACL
-    Export:
-      Name: !Sub "${AWS::StackName}-WebACLId"

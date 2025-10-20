@@ -1,0 +1,22 @@
+# apprunner.yaml
+version: 1.0
+runtime: python3
+build:
+  commands:
+    build:
+      - echo "Installing uv package manager"
+      - pip install --no-cache-dir uv
+      - echo "Installing dependencies"
+      - uv sync --frozen
+run:
+  runtime-version: 3.11
+  command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+  network:
+    port: 8000
+  env:
+    - name: ENVIRONMENT
+      value: dev
+    - name: REGION
+      value: us-east-1
+    - name: COINBASE_API_KEY
+      value: coinbase_api_key_secret

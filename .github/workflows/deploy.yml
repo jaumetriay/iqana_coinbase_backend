@@ -47,7 +47,7 @@ jobs:
             --template-file deployment/cloudformation/template.yaml \
             --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
             --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
-            --capabilities CAPABILITY_IAM
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
 
       - name: Login to ECR
         run: |

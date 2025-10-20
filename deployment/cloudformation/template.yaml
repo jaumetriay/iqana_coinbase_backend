@@ -109,41 +109,40 @@ Resources:
             MetricName: !Sub "IpReputation-${Environment}"
 
   # App Runner Service
-  AppRunnerService:
-    Type: AWS::AppRunner::Service
-    Properties:
-      ServiceName: !Sub "coinbase-service-${Environment}"
-      SourceConfiguration:
-        AutoDeploymentsEnabled: false
-        CodeRepository:
-          RepositoryUrl: "https://github.com/jaumetriay/iqana_coinbase_backend"
-          SourceCodeVersion:
-            Type: BRANCH
-            Value: main
-          CodeConfiguration:
-            ConfigurationSource: API
-            CodeConfigurationValues:
-              Runtime: DOCKER
-              BuildCommand: "docker build -f docker/dockerfile -t coinbase-service ."
-              StartCommand: "uv run uvicorn app.main:app --host 0.0.0.0 --port 8000"
-              RuntimeEnvironmentVariables:
-                - Name: ENVIRONMENT
-                  Value: !Ref Environment
-                - Name: REGION
-                  Value: !Ref AWS::Region
-                - Name: COINBASE_API_KEY
-                  Value: coinbase_api_key_secret
-      InstanceConfiguration:
-        Cpu: 0.25 vCPU
-        Memory: 0.5 GB
-        InstanceRoleArn: !Ref AppRunnerInstanceRole
-      HealthCheckConfiguration:
-        Protocol: HTTP
-        Path: /health
-        Interval: 10
-        Timeout: 5
-        HealthyThreshold: 1
-        UnhealthyThreshold: 5
+AppRunnerService:
+  Type: AWS::AppRunner::Service
+  Properties:
+    ServiceName: !Sub "coinbase-service-${Environment}"
+    SourceConfiguration:
+      ImageRepository:
+        ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/coinbase-service:${Environment}"
+        ImageConfiguration:
+          Port: 8000
+          RuntimeEnvironmentVariables:
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+            - Name: REGION
+              Value: !Ref AWS::Region
+            - Name: COINBASE_API_KEY
+              Value: coinbase_api_key_secret
+        ImageRepositoryType: ECR
+    InstanceConfiguration:
+      Cpu: 0.25 vCPU
+      Memory: 0.5 GB
+      InstanceRoleArn: !Ref AppRunnerInstanceRole
+    HealthCheckConfiguration:
+      Protocol: HTTP
+      Path: /health
+      Interval: 10
+      Timeout: 5
+      HealthyThreshold: 1
+      UnhealthyThreshold: 5
+    Tags:
+      - Key: Environment
+        Value: !Ref Environment
+      - Key: Service
+        Value: coinbase-holdings-api
+
 
 
   # CloudFront Distribution

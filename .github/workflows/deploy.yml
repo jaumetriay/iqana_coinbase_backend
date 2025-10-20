@@ -2,7 +2,7 @@ name: Deploy Coinbase Service
 
 on:
   push:
-    branches: [main, dev, uat, prod]  # Can deploy any branch
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -10,10 +10,7 @@ on:
         required: true
         default: 'dev'
         type: choice
-        options:
-          - dev
-          - uat
-          - prod
+        options: [dev, uat, prod]
 
 env:
   AWS_REGION: us-east-1
@@ -25,12 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set environment from input or default
+      - name: Set environment
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
           else
-            # Default environment for push events (you can change this)
             echo "ENVIRONMENT=dev" >> $GITHUB_ENV
           fi
 
@@ -49,27 +45,33 @@ jobs:
             --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
 
-      - name: Login to ECR
-        run: |
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-          docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
-
       - name: Build and push Docker image
         run: |
-          # Use git commit SHA for unique image tags
-          IMAGE_TAG="${{ env.ENVIRONMENT }}-$(git rev-parse --short HEAD)"
-          docker build -f docker/dockerfile -t coinbase-service:$IMAGE_TAG .
-          docker tag coinbase-service:$IMAGE_TAG ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/coinbase-service:$IMAGE_TAG
-          docker tag coinbase-service:$IMAGE_TAG ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/coinbase-service:${{ env.ENVIRONMENT }}
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/coinbase-service:$IMAGE_TAG
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/coinbase-service:${{ env.ENVIRONMENT }}
+          ECR_URI=$(aws cloudformation describe-stacks \
+            --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`ECRRepositoryURI`].OutputValue' \
+            --output text)
+
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+          docker login --username AWS --password-stdin $ECR_URI
+
+          docker build -f docker/dockerfile -t coinbase-service:${{ env.ENVIRONMENT }} .
+          docker tag coinbase-service:${{ env.ENVIRONMENT }} $ECR_URI:${{ env.ENVIRONMENT }}
+          docker push $ECR_URI:${{ env.ENVIRONMENT }}
 
       - name: Update App Runner service
         run: |
-          aws apprunner start-deployment --service-arn $(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='coinbase-service-${{ env.ENVIRONMENT }}'].ServiceArn" --output text)
+          aws apprunner start-deployment \
+            --service-arn $(aws apprunner list-services \
+              --query "ServiceSummaryList[?ServiceName=='coinbase-service-${{ env.ENVIRONMENT }}'].ServiceArn" \
+              --output text)
 
-      - name: Display deployment info
+      - name: Get deployment URLs
         run: |
-          echo "🚀 Deployed branch: ${{ github.ref_name }}"
-          echo "🎯 Environment: ${{ env.ENVIRONMENT }}"
-          echo "📦 Image tag: ${{ env.ENVIRONMENT }}-$(git rev-parse --short HEAD)"
+          echo "🚀 Deployment to ${{ env.ENVIRONMENT }} complete!"
+          CLOUDFRONT_URL=$(aws cloudformation describe-stacks \
+            --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontURL`].OutputValue' \
+            --output text)
+          echo "📡 Protected API URL: https://$CLOUDFRONT_URL"
+          echo "🔍 Test: https://$CLOUDFRONT_URL/health"

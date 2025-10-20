@@ -77,6 +77,16 @@ Resources:
         Comment: !Sub "CloudFront distribution for coinbase-service-${Environment}"
         PriceClass: PriceClass_100
 
+  SourceConfiguration:
+    CodeRepository:
+      RepositoryUrl: !Ref GitHubRepo
+      SourceCodeVersion:
+        Type: BRANCH
+        Value: !Ref GitHubBranch
+      CodeConfiguration:
+        ConfigurationSource: CONFIGURATION_FILE
+    AutoDeploymentsEnabled: false
+
 Outputs:
   AppRunnerServiceUrl:
     Description: App Runner Service URL (Direct access)

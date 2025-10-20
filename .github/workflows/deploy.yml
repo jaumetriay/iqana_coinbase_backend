@@ -42,36 +42,44 @@ jobs:
           aws cloudformation deploy \
             --template-file deployment/cloudformation/template.yaml \
             --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
-            --parameter-overrides Environment=${{ env.ENVIRONMENT }} \
+            --parameter-overrides \
+              Environment=${{ env.ENVIRONMENT }} \
+              BaseStackName=coinbase-base-${{ env.ENVIRONMENT }} \
+              GitHubRepo=${{ github.server_url }}/${{ github.repository }} \
+              GitHubBranch=${{ github.ref_name }} \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
 
-      - name: Build and push Docker image
+      - name: Trigger App Runner deployment
         run: |
-          ECR_URI=$(aws cloudformation describe-stacks \
-            --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
-            --query 'Stacks[0].Outputs[?OutputKey==`ECRRepositoryURI`].OutputValue' \
+          echo "🚀 Triggering App Runner deployment..."
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='coinbase-service-${{ env.ENVIRONMENT }}'].ServiceArn" \
             --output text)
 
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-          docker login --username AWS --password-stdin $ECR_URI
-
-          docker build -f docker/dockerfile -t coinbase-service:${{ env.ENVIRONMENT }} .
-          docker tag coinbase-service:${{ env.ENVIRONMENT }} $ECR_URI:${{ env.ENVIRONMENT }}
-          docker push $ECR_URI:${{ env.ENVIRONMENT }}
-
-      - name: Update App Runner service
-        run: |
-          aws apprunner start-deployment \
-            --service-arn $(aws apprunner list-services \
-              --query "ServiceSummaryList[?ServiceName=='coinbase-service-${{ env.ENVIRONMENT }}'].ServiceArn" \
-              --output text)
+          if [ -n "$SERVICE_ARN" ]; then
+            aws apprunner start-deployment --service-arn $SERVICE_ARN
+            echo "✅ Deployment triggered for service: $SERVICE_ARN"
+          else
+            echo "⚠️  Service not found, it may be newly created and will deploy automatically"
+          fi
 
       - name: Get deployment URLs
         run: |
           echo "🚀 Deployment to ${{ env.ENVIRONMENT }} complete!"
+
+          # Wait a moment for stack to be ready
+          sleep 10
+
           CLOUDFRONT_URL=$(aws cloudformation describe-stacks \
             --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
             --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontURL`].OutputValue' \
             --output text)
-          echo "📡 Protected API URL: https://$CLOUDFRONT_URL"
-          echo "🔍 Test: https://$CLOUDFRONT_URL/health"
+
+          APP_RUNNER_URL=$(aws cloudformation describe-stacks \
+            --stack-name coinbase-service-${{ env.ENVIRONMENT }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`AppRunnerServiceUrl`].OutputValue' \
+            --output text)
+
+          echo "📡 Protected API URL: $CLOUDFRONT_URL"
+          echo "🔗 Direct App Runner URL: $APP_RUNNER_URL"
+          echo "🔍 Test: $CLOUDFRONT_URL/health"

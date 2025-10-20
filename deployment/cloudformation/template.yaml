@@ -109,39 +109,39 @@ Resources:
             MetricName: !Sub "IpReputation-${Environment}"
 
   # App Runner Service
-AppRunnerService:
-  Type: AWS::AppRunner::Service
-  Properties:
-    ServiceName: !Sub "coinbase-service-${Environment}"
-    SourceConfiguration:
-      ImageRepository:
-        ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/coinbase-service:${Environment}"
-        ImageConfiguration:
-          Port: 8000
-          RuntimeEnvironmentVariables:
-            - Name: ENVIRONMENT
-              Value: !Ref Environment
-            - Name: REGION
-              Value: !Ref AWS::Region
-            - Name: COINBASE_API_KEY
-              Value: coinbase_api_key_secret
-        ImageRepositoryType: ECR
-    InstanceConfiguration:
-      Cpu: 0.25 vCPU
-      Memory: 0.5 GB
-      InstanceRoleArn: !Ref AppRunnerInstanceRole
-    HealthCheckConfiguration:
-      Protocol: HTTP
-      Path: /health
-      Interval: 10
-      Timeout: 5
-      HealthyThreshold: 1
-      UnhealthyThreshold: 5
-    Tags:
-      - Key: Environment
-        Value: !Ref Environment
-      - Key: Service
-        Value: coinbase-holdings-api
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub "coinbase-service-${Environment}"
+      SourceConfiguration:
+        ImageRepository:
+          ImageIdentifier: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/coinbase-service:${Environment}"
+          ImageConfiguration:
+            Port: 8000
+            RuntimeEnvironmentVariables:
+              - Name: ENVIRONMENT
+                Value: !Ref Environment
+              - Name: REGION
+                Value: !Ref AWS::Region
+              - Name: COINBASE_API_KEY
+                Value: coinbase_api_key_secret
+          ImageRepositoryType: ECR
+      InstanceConfiguration:
+        Cpu: 0.25 vCPU
+        Memory: 0.5 GB
+        InstanceRoleArn: !Ref AppRunnerInstanceRole
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /health
+        Interval: 10
+        Timeout: 5
+        HealthyThreshold: 1
+        UnhealthyThreshold: 5
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Service
+          Value: coinbase-holdings-api
 
 
 
